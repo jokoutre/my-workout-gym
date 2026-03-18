@@ -1,22 +1,39 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipForward, CheckCircle, Settings, Dumbbell, Calendar, ArrowRight, RotateCcw, AlertTriangle, Activity, Save, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, Pause, SkipForward, CheckCircle, Settings, Dumbbell, Calendar, ArrowRight, Activity, Save, Clock, AlertTriangle } from 'lucide-react';
 
-// --- DATA: Available Exercises Based on Equipment ---
+// --- DATA: Expanded Exercise Database ---
 const EXERCISE_DB = [
+  // Chest
   { id: 'e1', name: 'Flat Bench Press', equipment: 'Flat Bench, Bars', target: 'Chest', defaultSets: 3, defaultReps: 8, restTime: 90 },
   { id: 'e2', name: 'Incline Dumbbell Press', equipment: 'Incline Bench, Dumbbells', target: 'Chest', defaultSets: 3, defaultReps: 10, restTime: 90 },
+  
+  // Back
   { id: 'e3', name: 'Lat Pulldown', equipment: 'Lat Pull Machine', target: 'Back', defaultSets: 3, defaultReps: 10, restTime: 90 },
   { id: 'e4', name: 'Pull-ups', equipment: 'Pull-up Bar', target: 'Back', defaultSets: 3, defaultReps: 8, restTime: 120 },
   { id: 'e5', name: 'Dumbbell Rows', equipment: 'Flat Bench, Dumbbells', target: 'Back', defaultSets: 3, defaultReps: 12, restTime: 90 },
+  { id: 'e10', name: 'Wide Grip Row', equipment: 'Barbell/Machine', target: 'Back', defaultSets: 3, defaultReps: 10, restTime: 90 },
+  { id: 'e11', name: 'Supinated Grip Row', equipment: 'Barbell/Dumbbells', target: 'Back', defaultSets: 3, defaultReps: 10, restTime: 90 },
+  
+  // Shoulders
   { id: 'e6', name: 'Dumbbell Shoulder Press', equipment: 'Dumbbells', target: 'Shoulders', defaultSets: 3, defaultReps: 10, restTime: 90 },
   { id: 'e7', name: 'Lateral Raises', equipment: 'Dumbbells', target: 'Shoulders', defaultSets: 3, defaultReps: 15, restTime: 60 },
+  { id: 'e15', name: 'Behind the Neck Press', equipment: 'Barbell', target: 'Shoulders', defaultSets: 3, defaultReps: 10, restTime: 90 },
+  { id: 'e16', name: 'High Pull', equipment: 'Barbell', target: 'Shoulders', defaultSets: 3, defaultReps: 8, restTime: 90 },
+  { id: 'e17', name: 'Shoulder Shrugs', equipment: 'Barbell/Dumbbells', target: 'Shoulders', defaultSets: 3, defaultReps: 15, restTime: 60 },
+  
+  // Arms & Forearms
   { id: 'e8', name: 'Bicep Curls', equipment: 'Dumbbells', target: 'Arms', defaultSets: 3, defaultReps: 12, restTime: 60 },
   { id: 'e9', name: 'Tricep Extensions', equipment: 'Dumbbells', target: 'Arms', defaultSets: 3, defaultReps: 12, restTime: 60 },
+  { id: 'e12', name: 'Skull Crushers', equipment: 'EZ Bar/Dumbbells', target: 'Arms', defaultSets: 3, defaultReps: 12, restTime: 60 },
+  { id: 'e14', name: 'Reverse Grip Curls', equipment: 'Barbell/Dumbbells', target: 'Arms', defaultSets: 3, defaultReps: 12, restTime: 60 },
+  { id: 'e20', name: 'Palms Down Wrist Curls', equipment: 'Barbell/Dumbbells', target: 'Arms', defaultSets: 3, defaultReps: 15, restTime: 60 },
+  
+  // Legs
+  { id: 'e18', name: 'Squat', equipment: 'Barbell, Squat Rack', target: 'Legs', defaultSets: 4, defaultReps: 8, restTime: 120 },
+  { id: 'e19', name: 'Romanian Deadlift (RDL)', equipment: 'Barbell/Dumbbells', target: 'Legs', defaultSets: 3, defaultReps: 10, restTime: 90 }
 ];
 
 // --- UTILITY: Robust LocalStorage Hook ---
-// FIXED: This hook now perfectly handles functional state updates (e.g., prev => prev + 1).
-// This is critical so our 1-second interval timer always pulls the most accurate, up-to-date state.
 function useLocalStorage(key, initialValue) {
   const [storedValue, setStoredValue] = useState(() => {
     try {
@@ -29,7 +46,6 @@ function useLocalStorage(key, initialValue) {
   });
 
   const setValue = (value) => {
-    // By placing the logic INSIDE the setStoredValue callback, we guarantee access to the absolute latest 'prev' state
     setStoredValue(prev => {
       const valueToStore = value instanceof Function ? value(prev) : value;
       try {
@@ -75,7 +91,7 @@ export default function App() {
     isActive: false,
     activeExerciseIndex: 0,
     currentSet: 1,
-    mode: 'idle', // 'idle', 'ready', 'work', 'rest', 'complete'
+    mode: 'idle', 
     timeLeft: 0,
     isPaused: false,
     currentWeight: 0,
@@ -83,19 +99,27 @@ export default function App() {
   });
 
   const generateRoutine = (dayNumber = progress.currentDay) => {
+    const legEx = EXERCISE_DB.filter(e => e.target === 'Legs');
     const chestEx = EXERCISE_DB.filter(e => e.target === 'Chest');
     const backEx = EXERCISE_DB.filter(e => e.target === 'Back');
     const shoulderEx = EXERCISE_DB.filter(e => e.target === 'Shoulders');
     const armEx = EXERCISE_DB.filter(e => e.target === 'Arms');
 
-    const getRotated = (list) => list[(dayNumber - 1) % list.length];
+    // Safe rotation helper
+    const getRotated = (list, offset = 0) => {
+      if (!list || list.length === 0) return null;
+      return list[(dayNumber - 1 + offset) % list.length];
+    };
 
+    // New 6-Exercise Structure
     const dailyRoutine = [
-      getRotated(chestEx),
-      getRotated(backEx),
-      getRotated(shoulderEx),
-      getRotated(armEx),
-    ];
+      getRotated(legEx),         // 1. Legs
+      getRotated(chestEx),       // 2. Chest
+      getRotated(backEx),        // 3. Back
+      getRotated(shoulderEx),    // 4. Shoulders
+      getRotated(armEx, 0),      // 5. Arms (First exercise)
+      getRotated(armEx, 1),      // 6. Arms (Second exercise, offset by 1)
+    ].filter(Boolean); // Removes any nulls just in case
     
     setRoutine(dailyRoutine);
     return dailyRoutine;
@@ -118,26 +142,14 @@ export default function App() {
     return { reps: baseReps + (cycleWeek - 1), sets: baseSets };
   };
 
-  // =========================================================================
-  // --- RESTRUCTURED LOGIC: Timer Management & Modes ---
-  // =========================================================================
-  // Clarification on how timeLeft works in each mode:
-  // 1. 'idle' : Timer is off (0). Waiting for the user to initiate.
-  // 2. 'ready': Counts DOWN from 10 to 0. Gives you time to grab weights.
-  // 3. 'work' : Counts UP from 0. Acts as a stopwatch so you know how long the set took.
-  // 4. 'rest' : Counts DOWN from your target rest time to 0. Time to recover.
-  
-  // TIMER TICKER EFFECT: Strictly responsible for adding/subtracting 1 second.
   useEffect(() => {
     let interval = null;
     if (!workoutState.isPaused) {
       if ((workoutState.mode === 'ready' || workoutState.mode === 'rest') && workoutState.timeLeft > 0) {
-        // Count DOWN for Rest and Ready modes
         interval = setInterval(() => {
           setWorkoutState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
         }, 1000);
       } else if (workoutState.mode === 'work') {
-        // Count UP for Work mode (Stopwatch functionality)
         interval = setInterval(() => {
           setWorkoutState(prev => ({ ...prev, timeLeft: prev.timeLeft + 1 }));
         }, 1000);
@@ -146,16 +158,14 @@ export default function App() {
     return () => { if (interval) clearInterval(interval); };
   }, [workoutState.mode, workoutState.isPaused, workoutState.timeLeft]);
 
-  // TIMER TRANSITION EFFECT: Strictly responsible for safely moving between phases when time runs out.
   useEffect(() => {
     if (workoutState.timeLeft === 0) {
       if (workoutState.mode === 'ready') {
         playBeep('start');
-        setWorkoutState(prev => ({ ...prev, mode: 'work', timeLeft: 0 })); // Start stopwatch from 0
+        setWorkoutState(prev => ({ ...prev, mode: 'work', timeLeft: 0 })); 
       } 
       else if (workoutState.mode === 'rest') {
         playBeep('ready');
-        
         const currentEx = routine[workoutState.activeExerciseIndex];
         if (!currentEx) return;
 
@@ -163,14 +173,12 @@ export default function App() {
         
         setWorkoutState(prev => {
           if (prev.currentSet < targetSets) {
-            // Move to next set
             return { ...prev, mode: 'ready', timeLeft: 10, currentSet: prev.currentSet + 1, loggedReps: 0 };
           } else {
-            // Move to next exercise, or finish
             if (prev.activeExerciseIndex + 1 < routine.length) {
               return { ...prev, mode: 'idle', activeExerciseIndex: prev.activeExerciseIndex + 1, currentSet: 1, loggedReps: 0 };
             } else {
-              return { ...prev, mode: 'complete' }; // Triggers the completion effect below
+              return { ...prev, mode: 'complete' }; 
             }
           }
         });
@@ -178,7 +186,6 @@ export default function App() {
     }
   }, [workoutState.timeLeft, workoutState.mode, routine, workoutState.activeExerciseIndex]);
 
-  // WORKOUT COMPLETION EFFECT: Handles advancing the program when all exercises are done.
   useEffect(() => {
     if (workoutState.mode === 'complete') {
       setProgress(prev => {
@@ -195,7 +202,6 @@ export default function App() {
       setWorkoutState(prev => ({ ...prev, mode: 'idle', isActive: false }));
     }
   }, [workoutState.mode]);
-  // =========================================================================
 
   const startExercise = () => {
     playBeep('ready');
@@ -209,7 +215,6 @@ export default function App() {
     const currentEx = routine[workoutState.activeExerciseIndex];
     const { reps: targetReps } = calculateTarget(currentEx.defaultReps, currentEx.defaultSets);
     
-    // Adaptive Logic: If user struggled (missed reps), give slightly more rest
     let nextRestTime = currentEx.restTime;
     if (workoutState.loggedReps < targetReps) {
       nextRestTime += 30;
@@ -223,14 +228,11 @@ export default function App() {
       weight: workoutState.currentWeight,
       reps: workoutState.loggedReps,
       targetReps: targetReps,
-      duration: workoutState.timeLeft // Save how long the set took!
+      duration: workoutState.timeLeft 
     };
     setProgress(prev => ({ ...prev, history: [...prev.history, logEntry] }));
-
     setWorkoutState(prev => ({ ...prev, mode: 'rest', timeLeft: nextRestTime, isPaused: false }));
   };
-
-  // --- UI COMPONENTS ---
 
   const SetupView = () => (
     <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
@@ -267,7 +269,7 @@ export default function App() {
         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
           <div>
             <span className="block text-sm font-semibold text-gray-700">Enable Deload Weeks</span>
-            <span className="text-xs text-gray-500">Reduce intensity every 4th week to recover.</span>
+            <span className="text-xs text-gray-500">Reduce intensity every 4th week.</span>
           </div>
           <input 
             type="checkbox" 
@@ -299,33 +301,8 @@ export default function App() {
         </button>
       </header>
 
-      {isDeloadWeek && (
-        <div className="bg-purple-100 text-purple-800 p-4 rounded-2xl mb-6 flex items-start gap-3 border border-purple-200">
-          <Activity className="shrink-0 mt-1" size={20} />
-          <div>
-            <h4 className="font-bold">Deload Week</h4>
-            <p className="text-sm">Volume is reduced this week to help your muscles recover and grow.</p>
-          </div>
-        </div>
-      )}
-
-      {workoutState.isActive && (
-        <div className="bg-yellow-100 text-yellow-800 p-4 rounded-2xl mb-6 flex items-center justify-between border border-yellow-200">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={20} />
-            <span className="font-bold text-sm">Workout in progress</span>
-          </div>
-          <button 
-            onClick={() => setView('workout')}
-            className="bg-yellow-800 text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-yellow-900"
-          >
-            Resume
-          </button>
-        </div>
-      )}
-
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Today's Plan</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Today's Plan (6 Exercises)</h2>
         <div className="space-y-3">
           {routine.map((ex, idx) => {
             const { reps, sets } = calculateTarget(ex.defaultReps, ex.defaultSets);
@@ -366,7 +343,6 @@ export default function App() {
     if (!currentEx) return null; 
     
     const { reps: targetReps, sets: targetSets } = calculateTarget(currentEx.defaultReps, currentEx.defaultSets);
-    
     const isRest = workoutState.mode === 'rest';
     const isReady = workoutState.mode === 'ready';
     const isWork = workoutState.mode === 'work';
@@ -398,7 +374,6 @@ export default function App() {
           <h2 className="text-3xl font-bold text-gray-800 mb-1">{currentEx.name}</h2>
           <p className="text-lg text-gray-500 mb-8 font-medium">Set {workoutState.currentSet} of {targetSets}</p>
 
-          {/* VISUAL TIMER & STOPWATCH */}
           <div className="relative w-64 h-64 flex items-center justify-center mb-8 bg-white/40 rounded-full shadow-inner">
             <svg className="absolute inset-0 w-full h-full transform -rotate-90">
               <circle cx="128" cy="128" r="120" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-gray-200/50" />
@@ -406,9 +381,7 @@ export default function App() {
                 <circle 
                   cx="128" cy="128" r="120" stroke="currentColor" strokeWidth="8" fill="transparent" strokeLinecap="round"
                   strokeDasharray="753.6" 
-                  strokeDashoffset={
-                    isWork ? 0 : (753.6 - (753.6 * (workoutState.timeLeft / (isRest ? currentEx.restTime : 10))))
-                  }
+                  strokeDashoffset={isWork ? 0 : (753.6 - (753.6 * (workoutState.timeLeft / (isRest ? currentEx.restTime : 10))))}
                   className={`transition-all duration-1000 linear ${isRest ? 'text-red-500' : isWork ? 'text-green-500 opacity-20' : 'text-yellow-500'}`} 
                 />
               )}
@@ -440,17 +413,11 @@ export default function App() {
                 <>
                   <div className="text-xs font-bold text-red-600 mb-1 uppercase tracking-widest">Rest</div>
                   <div className="text-6xl font-black text-gray-800">{formatTime(workoutState.timeLeft)}</div>
-                  {workoutState.loggedReps < targetReps && (
-                    <div className="text-xs font-semibold text-red-500 mt-2 max-w-[150px] leading-tight">
-                      Rest increased to help you recover!
-                    </div>
-                  )}
                 </>
               )}
             </div>
           </div>
 
-          {/* DYNAMIC CONTROLS */}
           <div className="w-full space-y-4">
             {workoutState.mode === 'idle' && (
               <button onClick={startExercise} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 flex justify-center items-center gap-2 shadow-lg shadow-blue-200">
@@ -459,28 +426,45 @@ export default function App() {
             )}
 
             {isWork && (
-              <div className="bg-white/60 p-4 rounded-2xl border border-gray-200 space-y-4 shadow-sm">
+              <div className="bg-white/60 p-4 rounded-2xl border border-gray-200 space-y-5 shadow-sm">
+                
+                {/* NEW UX DESIGN: Custom Buttons for Weight and Reps */}
                 <div className="flex gap-4">
+                  {/* Weight Input Box */}
                   <div className="flex-1">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Weight (kg/lbs)</label>
-                    <input 
-                      type="number" 
-                      className="w-full p-3 bg-white border border-gray-200 rounded-xl text-center font-bold text-lg outline-none focus:ring-2 focus:ring-green-500"
-                      value={workoutState.currentWeight || ''}
-                      onChange={(e) => setWorkoutState({...workoutState, currentWeight: Number(e.target.value)})}
-                      placeholder="0"
-                    />
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Weight</label>
+                    <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      <button onClick={() => setWorkoutState(p => ({...p, currentWeight: Math.max(0, p.currentWeight - 2.5)}))} className="w-12 h-12 bg-gray-50 text-gray-600 font-bold text-2xl hover:bg-gray-100 flex items-center justify-center border-r border-gray-200 active:bg-gray-200">-</button>
+                      <input 
+                        type="number" 
+                        inputMode="decimal"
+                        className="w-full text-center font-bold text-lg outline-none bg-transparent"
+                        value={workoutState.currentWeight || ''}
+                        onChange={(e) => setWorkoutState({...workoutState, currentWeight: Number(e.target.value)})}
+                        placeholder="0"
+                      />
+                      <button onClick={() => setWorkoutState(p => ({...p, currentWeight: p.currentWeight + 2.5}))} className="w-12 h-12 bg-gray-50 text-gray-600 font-bold text-2xl hover:bg-gray-100 flex items-center justify-center border-l border-gray-200 active:bg-gray-200">+</button>
+                    </div>
                   </div>
+
+                  {/* Reps Input Box */}
                   <div className="flex-1">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Actual Reps</label>
-                    <input 
-                      type="number" 
-                      className="w-full p-3 bg-white border border-gray-200 rounded-xl text-center font-bold text-lg outline-none focus:ring-2 focus:ring-green-500"
-                      value={workoutState.loggedReps || ''}
-                      onChange={(e) => setWorkoutState({...workoutState, loggedReps: Number(e.target.value)})}
-                    />
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Reps</label>
+                    <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      <button onClick={() => setWorkoutState(p => ({...p, loggedReps: Math.max(0, p.loggedReps - 1)}))} className="w-12 h-12 bg-gray-50 text-gray-600 font-bold text-2xl hover:bg-gray-100 flex items-center justify-center border-r border-gray-200 active:bg-gray-200">-</button>
+                      <input 
+                        type="number" 
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className="w-full text-center font-bold text-lg outline-none bg-transparent"
+                        value={workoutState.loggedReps || ''}
+                        onChange={(e) => setWorkoutState({...workoutState, loggedReps: Number(e.target.value)})}
+                      />
+                      <button onClick={() => setWorkoutState(p => ({...p, loggedReps: p.loggedReps + 1}))} className="w-12 h-12 bg-gray-50 text-gray-600 font-bold text-2xl hover:bg-gray-100 flex items-center justify-center border-l border-gray-200 active:bg-gray-200">+</button>
+                    </div>
                   </div>
                 </div>
+
                 <button onClick={finishSet} className="w-full bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 flex justify-center items-center gap-2 shadow-lg shadow-green-200">
                   <Save size={20} /> Log & Rest
                 </button>
@@ -497,7 +481,6 @@ export default function App() {
                   {workoutState.isPaused ? 'Resume' : 'Pause'}
                 </button>
                 <button 
-                  // Instantly setting time to 0 guarantees the Transition Effect gracefully catches it
                   onClick={() => setWorkoutState(prev => ({ ...prev, timeLeft: 0 }))} 
                   className="flex-1 bg-gray-800 text-white font-bold py-4 rounded-xl shadow-sm hover:bg-gray-900 flex justify-center items-center gap-2"
                 >
